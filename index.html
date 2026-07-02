@@ -4,13 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>circas</title>
+<meta name="description" content="one check a day: did four hours of deep work. no streak to break.">
+<!-- homescreen presence — add to home screen and circas becomes a morning icon -->
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0a0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="circas">
 <style>
 /* ── shared foundation tokens (pasted, not imported) ── */
 :root{
   --font: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", monospace;
   --bg:#0a0a0b; --panel:#141416; --line:#24242a;
   --fg:#e6e6e6; --dim:#6f6f78; --faint:#3a3a42;
-  --acc:#3ddc84; --acc-dim:#1f6f47; --warn:#ff5c5c;
+  --acc:#f5a524; --acc-dim:#7a5310; --warn:#ff5c5c;   /* per-app accent: circas = sunrise amber */
   --t-xl:2.25rem; --t-l:1.25rem; --t-m:1rem; --t-s:0.8125rem;
   --s1:4px; --s2:8px; --s3:16px; --s4:24px; --s5:48px;
   --radius:8px; --maxw:32rem;
@@ -21,7 +31,8 @@ body{
   font-family:var(--font); font-size:var(--t-m);
   text-transform:lowercase; line-height:1.5; letter-spacing:-0.01em;
   display:grid; place-items:start center; min-height:100dvh;
-  padding:var(--s5) var(--s3);
+  padding:max(var(--s5), env(safe-area-inset-top)) var(--s3) max(var(--s4), env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color:transparent;
 }
 main{ width:100%; max-width:var(--maxw); text-align:center; }
 button{
@@ -33,24 +44,31 @@ button{
 button:hover{ border-color:var(--acc-dim); }
 button:active{ transform:translateY(1px); }
 button:disabled{ cursor:default; }
-.dim{ color:var(--dim); }
+.dim{ color:var(--dim); } .acc{ color:var(--acc); }
 
 /* ── circas ── */
 .bar{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:var(--s5); }
 .mark{ font-size:var(--t-l); }
 .date{ font-size:var(--t-l); margin-bottom:var(--s4); }
 .sun{ margin-bottom:var(--s5); }
+.sun .lead{ color:var(--acc); }
 #check{ width:100%; padding:var(--s4); font-size:var(--t-l); }
 #check.done{ color:var(--acc); border-color:var(--acc-dim); }
 .note{ min-height:1.4em; margin:var(--s4) 0 0; font-size:var(--t-s); }
-.dots{ display:flex; gap:var(--s3); justify-content:center; margin:var(--s5) 0 var(--s4); }
-.cell{ display:flex; flex-direction:column; align-items:center; gap:var(--s2); }
-.dot{ width:14px; height:14px; border-radius:50%; border:1px solid var(--line); background:transparent; }
+/* rolling 4-week calendar — momentum you can see, with no streak to break */
+.cal-h{ display:grid; grid-template-columns:repeat(7,1fr); gap:var(--s2); max-width:17rem; margin:var(--s5) auto var(--s2); }
+.cal{ display:grid; grid-template-columns:repeat(7,1fr); gap:var(--s2); max-width:17rem; margin:0 auto var(--s3); }
+.cal .cell{ display:flex; align-items:center; justify-content:center; height:22px; }
+.colh{ font-size:10px; text-align:center; }
+.dot{ width:15px; height:15px; border-radius:50%; border:1px solid var(--line); background:transparent; }
 .dot.on{ background:var(--acc); border-color:var(--acc); }
 .dot.today{ box-shadow:0 0 0 2px var(--acc-dim); }
-.dot.today.on{ background:var(--acc); border-color:var(--acc); }
-.lbl{ font-size:10px; }
+.dot.future{ opacity:.25; border-style:dashed; }
 .best{ font-size:var(--t-s); }
+.actions{ margin-top:var(--s4); }
+#share{ font-size:var(--t-s); color:var(--dim); }
+#share:hover{ color:var(--acc); border-color:var(--acc-dim); }
+.foot{ margin-top:var(--s4); font-size:var(--t-s); }
 </style>
 </head>
 <body>
@@ -58,17 +76,22 @@ button:disabled{ cursor:default; }
   <header class="bar"><span class="mark">circas</span><span class="dim">neoselfy</span></header>
   <div id="date" class="date">—</div>
   <div class="sun">
-    <div id="sunrise">sunrise 05:40</div>
-    <div class="dim">your four hours start here.</div>
+    <div class="lead">up with the sun.</div>
+    <div class="dim">work while it climbs. four hours.</div>
   </div>
   <button id="check">did 4 hours of deep work</button>
   <p id="note" class="note dim"></p>
-  <div id="dots" class="dots"></div>
+
+  <div id="cal-h" class="cal-h" aria-hidden="true"></div>
+  <div id="cal" class="cal"></div>
   <p id="best" class="best dim"></p>
+
+  <div class="actions"><button id="share">send it to your human →</button></div>
+  <footer class="foot dim">local only · a miss just fades, it never resets you</footer>
 </main>
 <script type="module">
 const KEY = "circas";
-const SUNRISE = "05:40"; // v0: hard-coded, Toronto in July. edit as the season drifts. real sunrise API is v1, on purpose.
+const URL = "https://letam.github.io/circas/";
 const $ = s => document.querySelector(s);
 
 function load(){
@@ -87,6 +110,9 @@ const DOW = ["sun","mon","tue","wed","thu","fri","sat"];
 const MON = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
 const fmtDate = d => `${DOW[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`;
 
+// the Sunday that opens the current week (local midnight)
+function weekSunday(ref){ const x = new Date(ref); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }
+
 // silent personal best — longest run of consecutive done-days. never shown as "current streak".
 function bestRun(days){
   const keys = Object.keys(days).filter(k => days[k]).sort();
@@ -101,9 +127,20 @@ function bestRun(days){
   return best;
 }
 
+// current-week textual row (sun→sat) for sharing: ● done · ○ missed · · still to come
+function weekRow(){
+  const s = weekSunday(new Date()); let row = "", done = 0;
+  for (let i = 0; i < 7; i++){
+    const d = new Date(s); d.setDate(s.getDate() + i); const k = keyOf(d);
+    if (k > today) row += "·";
+    else if (state.days[k]) { row += "●"; done++; }
+    else row += "○";
+  }
+  return { row, done };
+}
+
 function render(){
-  $("#date").textContent    = fmtDate(new Date());
-  $("#sunrise").textContent = `sunrise ${SUNRISE}`;
+  $("#date").textContent = fmtDate(new Date());
 
   const done = !!state.days[today];
   const btn  = $("#check");
@@ -111,29 +148,38 @@ function render(){
   btn.classList.toggle("done", done);
   btn.disabled = done;                    // one-way latch, today only — no editing the past
 
-  // rolling last-7 dots; a miss is just an absent date that scrolls off in a week
-  const dots = $("#dots"); dots.innerHTML = "";
-  for (let i = 6; i >= 0; i--){
-    const d = new Date(); d.setDate(d.getDate() - i);
-    const k = keyOf(d);
+  // weekday header (once)
+  const calH = $("#cal-h");
+  if (!calH.childElementCount) for (const w of DOW){
+    const h = document.createElement("div"); h.className = "colh dim"; h.textContent = w[0]; calH.append(h);
+  }
+
+  // rolling 4 weeks, calendar-aligned so columns are weekdays; today ringed, future faded
+  const start = weekSunday(new Date()); start.setDate(start.getDate() - 21);
+  const cal = $("#cal"); cal.innerHTML = "";
+  for (let i = 0; i < 28; i++){
+    const d = new Date(start); d.setDate(start.getDate() + i); const k = keyOf(d);
     const cell = document.createElement("div"); cell.className = "cell";
     const dot  = document.createElement("div");
-    dot.className = "dot" + (state.days[k] ? " on" : "") + (k === today ? " today" : "");
-    const lbl  = document.createElement("div"); lbl.className = "lbl dim"; lbl.textContent = DOW[d.getDay()];
-    cell.append(dot, lbl); dots.append(cell);
+    dot.className = "dot" + (state.days[k] ? " on" : "") + (k === today ? " today" : "") + (k > today ? " future" : "");
+    dot.title = k;
+    cell.append(dot); cal.append(cell);
   }
 
   const best = bestRun(state.days);
-  $("#best").textContent = best > 0 ? `best run so far · ${best} ${best === 1 ? "day" : "days"}` : "";
+  const wk = weekRow();
+  $("#best").textContent = best > 0
+    ? `${wk.done}/7 this week · best run so far ${best} ${best === 1 ? "day" : "days"}`
+    : "";
 
   // notes — hard rule: never scold. kinder on a miss than on a hit.
   const note = $("#note");
   const keys = Object.keys(state.days).filter(k => state.days[k]);
   const hasPast = keys.some(k => k !== today);
   const y = new Date(); y.setDate(y.getDate() - 1); const yk = keyOf(y);
-  if (keys.length === 0)             note.textContent = "no dots yet. the first one's the whole game.";
+  if (keys.length === 0)               note.textContent = "no dots yet. the first one's the whole game.";
   else if (hasPast && !state.days[yk]) note.textContent = "yesterday's gone. the sun came up again. so did you.";
-  else                               note.textContent = "";
+  else                                 note.textContent = "";
 }
 
 $("#check").addEventListener("click", () => {
@@ -141,7 +187,19 @@ $("#check").addEventListener("click", () => {
   state.days[today] = true;
   state.bestRun = bestRun(state.days);
   save(state);
+  if (navigator.vibrate) navigator.vibrate(15);
   render();
+});
+
+// the human hook — the week as one textable line
+$("#share").addEventListener("click", async () => {
+  const wk = weekRow();
+  const text = `circas · ${wk.done}/7 deep-work days this week\n${wk.row}  (● done · ○ missed · · to come)`;
+  try {
+    if (navigator.share){ await navigator.share({ text, url: URL }); return; }
+    await navigator.clipboard.writeText(`${text}\n${URL}`);
+    $("#note").textContent = "copied. send it to the human who's checking on you.";
+  } catch(e){ if (e && e.name === "AbortError") return; $("#note").textContent = "couldn't share — screenshot the dots."; }
 });
 
 render();
