@@ -14,10 +14,10 @@ live countdown / 4-hour "window" gating · the second "woke for sunrise?" bit ·
 
 ## deploy
 ```
-gh repo create neoselfy/circas --public --clone
+gh repo create letam/circas --public --clone
 # copy index.html in
 git add -A && git commit -m "circas v0" && git push
-# github → Settings → Pages → main / root → enable  →  https://neoselfy.github.io/circas
+# github → Settings → Pages → main / root → enable  →  https://letam.github.io/circas
 ```
 
 ## the accountability
